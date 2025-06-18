@@ -1,7 +1,6 @@
-`use client`
+`use client`;
 import Link from "next/link";
 
-// interface ma aap jo bhui name de sakta ho and jo jo aapna render karana hai wo aap iska andar dadain type ka sath
 interface Get_Memes {
   url: string;
   id: string;
@@ -54,7 +53,7 @@ const Meme = async () => {
                 style={{
                   width: "350px",
                   height: "350px",
-                  objectFit: "cover", // Adjusts how the image fits into the container
+                  objectFit: "cover",
                 }}
               />
 
@@ -82,12 +81,3 @@ const Meme = async () => {
 };
 
 export default Meme;
-
-// const meme = async () => {
-//   const prod = await fetch(`https://api.imgflip.com/get_memes`);
-//   const res = await prod.json();
-//   console.log(res);
-//   }
-{
-  /* <button className="btn btn-primary btn-outline bg-inherit" onClick={meme}>show APi products</button>  */
-}
