@@ -1,8 +1,19 @@
 "use client";
 import Swal from "sweetalert2";
 import Image from "next/image";
-import React, { useEffect,useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Loading from "../loading";
+
+// --- Constants for Configuration ---
+const IMGFLIP_API_URL = "https://api.imgflip.com/caption_image";
+const API_USERNAME = "Muhammad-Umair";
+const API_PASSWORD = "Salam123";
+
+// --- Type Definitions ---
+interface Meme {
+  url: string;
+  downloadUrl: string;
+}
 
 interface GeneratorProps {
   searchParams: {
@@ -13,141 +24,183 @@ interface GeneratorProps {
   };
 }
 
-const MemeGenerator = ({ searchParams }: GeneratorProps) => {
-  console.log(searchParams);
+// --- Custom Hook for Meme Generation Logic ---
+const useMemeApi = (templateId: string) => {
+  const [meme, setMeme] = useState<Meme | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateMeme = useCallback(
+    async (texts: string[]) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          template_id: templateId,
+          username: API_USERNAME,
+          password: API_PASSWORD,
+        });
+
+        texts.forEach((text, index) => {
+          const trimmedText = text.trim();
+          if (trimmedText) {
+            params.append(`boxes[${index}][text]`, trimmedText);
+            params.append(`boxes[${index}][max_font_size]`, "25");
+          }
+        });
+
+        const response = await fetch(
+          `${IMGFLIP_API_URL}?${params.toString()}`,
+          {
+            method: "POST",
+          }
+        );
+
+        const result = await response.json();
+
+        if (result.success) {
+          const imageResponse = await fetch(result.data.url);
+          const blob = await imageResponse.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          setMeme({ url: result.data.url, downloadUrl: blobUrl });
+        } else {
+          throw new Error(result.error_message || "Failed to generate meme.");
+        }
+      } catch (err: any) {
+        console.error("Meme generation failed:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [templateId]
+  );
+
+  return { meme, isLoading, error, generateMeme };
+};
+
+// --- UI Component for Displaying the Generated Meme ---
+const MemeDisplay = ({
+  meme,
+  templateName,
+}: {
+  meme: Meme;
+  templateName: string;
+}) => (
+  <div className="m-auto w-[100%] sm:w-[500px] border-2 p-3 rounded-md mt-10">
+    <Image
+      src={meme.url}
+      alt={templateName}
+      width={500}
+      height={500}
+      quality={75}
+      priority
+    />
+    <a
+      href={meme.downloadUrl}
+      download={templateName}
+      className="btn btn-info p-4 text-center mt-4"
+    >
+      Download Meme
+    </a>
+  </div>
+);
+
+// --- UI Component for the Input Form ---
+const MemeForm = ({
+  boxCount,
+  onSubmit,
+  isLoading,
+}: {
+  boxCount: number;
+  onSubmit: (texts: string[]) => void;
+  isLoading: boolean;
+}) => {
+  const [inputs, setInputs] = useState<string[]>(() =>
+    Array(boxCount).fill("")
+  );
+
+  const handleInputChange = (index: number, value: string) => {
+    const newInputs = [...inputs];
+    newInputs[index] = value;
+    setInputs(newInputs);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(inputs);
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col gap-4 w-[100%] sm:w-[450px] m-auto mt-[70px] shadow-lg p-4 rounded-md"
+    >
+      <h1 className="text-center text-2xl font-semibold">Enter Meme Text</h1>
+      {inputs.map((_, index) => (
+        <input
+          key={index}
+          type="text"
+          value={inputs[index]}
+          onChange={(e) => handleInputChange(index, e.target.value)}
+          placeholder={`Text for box ${index + 1}`}
+          className="input input-bordered input-info w-full mb-2"
+        />
+      ))}
+      <button
+        type="submit"
+        className="btn btn-info p-4 text-center mt-4 w-1/2 m-auto"
+        disabled={isLoading}
+      >
+        {isLoading ? "Creating Meme..." : "Generate Meme"}
+      </button>
+    </form>
+  );
+};
+
+// --- Main Page Component ---
+const RefactoredMemeGenerator = ({ searchParams }: GeneratorProps) => {
   const { name, url, id, boxCount } = searchParams;
-  const [memeUrl, setMemeUrl] = useState<string | null>(null);
-  const [inputTexts, setInputTexts] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const { meme, isLoading, error, generateMeme } = useMemeApi(id);
 
   useEffect(() => {
-    if (boxCount) {
-      const count = parseInt(boxCount);
-      setInputTexts(Array(count).fill(" ")); //Initialize inputTexts with spaces
-    }
-  }, [boxCount]);
-
-  const handleInput = (index: number, value: string) => {
-    const updateInp = [...inputTexts];
-    updateInp[index] = value;
-    setInputTexts(updateInp);
-  }; //handleInput
-
-  //function to generate the meme
-  const memeGenerator = async () => {
-    setLoading(true);
-    try {
-    const trimmedTexts=inputTexts.map(text=>text.trim())
-      const params = new URLSearchParams();
-      params.append("template_id", id!);
-      params.append("username", "Muhammad-Umair"!);
-      params.append("password", "Salam123");
-
-      // Add all text values from inputTexts to the query parameters
-      trimmedTexts.forEach((text, index) => {
-        if(text){
-        params.append(`boxes[${index}][text]`, text);
-        params.append(`boxes[${index}][max_font_size]`, "25");
-        }
-      });
-
-      const response = await fetch(
-        `https://api.imgflip.com/caption_image?${params.toString()}`,
-        { method: "POST" }
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setMemeUrl(result.data.url);
-        // Fetch the image as a blob for downloading
-        const imageResponse = await fetch(result.data.url); //generate image file from url
-        const blob = await imageResponse.blob(); //image response into binary object called blob
-        const blobUrl = URL.createObjectURL(blob); //create a temp local url for the blob, allowed to be accessed as a downlaodable file
-
-        setDownloadUrl(blobUrl);
-
-        // setLoading(false);
-      } else {
-        console.error("Error generating meme:", result.error_message); //Log any api errors
-      }
-    } catch (error) {
-      console.error("Fetch error:", error); //log any api error
+    if (error) {
       Swal.fire({
         icon: "error",
         title: "Oops...",
-        text: "Something went wrong while generating the meme. Please try again.",
+        text: `Something went wrong: ${error}`,
       });
-    }finally {
-      setLoading(false);
     }
-    
-  };
+  }, [error]);
+
+  const numBoxCount = parseInt(boxCount, 10) || 0;
+
   return (
     <>
-      {loading && <Loading />}
+      {isLoading && <Loading />}
       <h2 className="text-center text-[22px] sm:text-[33px] py-3 text-[#000] font-semibold">
-        Selected Meme template: {name}
+        Selected Meme Template: {name}
       </h2>
-      {/* show temp image */}
-      {url && !memeUrl ? (
+
+      {!meme && url && (
         <Image
           className="m-auto shadow-lg p-1"
           src={url}
           height={450}
           width={450}
-          alt="memes"
+          alt="Meme template preview"
         />
-      ) : 
-        null
-      }
-
-      {/* show the generated meme */}
-      {memeUrl && (
-        <div className="m-auto w-[100%] sm:w-[500px] border-2 p-3 rounded-md mt-10">
-          <Image
-            src={memeUrl}
-            alt={name}
-            width={500}
-            height={500}
-            quality={75}
-          />
-          {downloadUrl && (
-            <a
-              href={downloadUrl}
-              download={name}
-              className="btn btn-info p-4 text-center mt-4 "
-            >
-              Download Meme
-            </a>
-          )}
-        </div>
       )}
-      {/* Meme text input fields */}
-      <div>
-        <div className="flex flex-col gap-4 w-[100%] sm:w-[450px] m-auto mt-[70px] shadow-lg p-4 rounded-md">
-          <h1 className="text-center text-2xl font-semibold">
-            Enter Meme text
-          </h1>
-          {inputTexts.length > 0 && inputTexts.map((_, index) => (
-            <input
-              type="text"
-              key={index}
-              onChange={(e) => handleInput(index, e.target.value)}
-              placeholder={`Text for box ${index + 1}`}
-              className="input input-bordered input-info w-full mb-2"
-            />
-          ))}
 
+      {meme && <MemeDisplay meme={meme} templateName={name} />}
 
-
-<button onClick={memeGenerator}  className="btn btn-info p-4 text-center mt-4 w-1/2 m-auto" disabled={loading}>{loading? "creating meme...": "generate meme" }</button>
-
-        </div>
-      </div>
+      <MemeForm
+        boxCount={numBoxCount}
+        onSubmit={generateMeme}
+        isLoading={isLoading}
+      />
     </>
   );
-  }//MemeGenerator
+};
 
-
-  export default MemeGenerator;
+export default RefactoredMemeGenerator;
